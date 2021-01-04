@@ -104,12 +104,14 @@ class Open(tk.Frame):
 			df_hl=pd.read_csv(file_hl)
 			col_hl=df_hl.columns
 			col_tl=df_tl.columns
-			temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())].sum()
-			print(float(temp_val))
-			df_hl["Qty"].loc[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())]=float(temp_val)+float(self.qty)
+			templs_hl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_hl)
+			# temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())].sum()
+			# df_hl["Qty"].loc[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())]=float(temp_val)+float(self.qty)
 			templs_tl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
 			df_tl=df_tl.append(templs_tl)
+			df_hl=df_hl.append(templs_hl)
 			try:
 				df_tl.to_csv(file_tl,index=False)
 				df_hl.to_csv(file_hl,index=False)
@@ -119,15 +121,15 @@ class Open(tk.Frame):
 
 		except:
 			box.showinfo('Info','New Client Entry!')
-			col_hl=["Bank","Client ID","Type","Ticker","Qty",\
+			col_hl=["Entry Date","Bank","Client ID","Type","Ticker","Qty",\
 			"Open Price","P&L","AB%","Gross Amount","Brokerage"]
 			col_tl=["Entry Date","Bank","Client ID",\
 			"Type","Ticker","Open Qty","Open Price"\
 			,"Gross Amount","Brokerage"]
-			templs_hl=pd.DataFrame(np.array([self.bnm,self.clid,self.typ.upper(),self.tckr.upper()\
-				,self.qty,self.op,np.nan,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_hl)
 			templs_tl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
+			templs_hl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_hl)
 			templs_tl.to_csv(file_tl,index=False)
 			templs_hl.to_csv(file_hl,index=False)
 
@@ -177,10 +179,18 @@ class Close(tk.Frame):
 			df_hl=pd.read_csv(file_hl)
 			col_hl=df_hl.columns
 			col_tl=df_tl.columns
-			total_cur=df_hl.Qty[(df_hl.Stocks==self.tckr)&(df_hl.Bank==self.bnm)].sum()
-			if self.cqty>total_cur:
+			total_cur=df_hl[(df_hl.Stocks==self.tckr)&(df_hl.Bank==self.bnm)]
+			if self.cqty>total_cur["Qty"].sum():
 				box.showinfo('Info','Closing Quantity is larger than units in holding!')
 				return()
+			total_cur=total_cur.sort_values(by=['Entry Date'])
+			temp_cum=total_cur["Qty"].cumsum()
+			temp_bool=temp_cum<self.cqty
+			temp_bool=total_cur[np.r_[True,temp_bool[:-1]]]
+			for itera in range(len(temp_bool[temp_bool==True])):
+				lval=self.cqty-total_cur.Qty[itera]
+				templs_tlc=pd.DataFrame(np.array([self.date,np.nan,self.bnm.upper(),self.clid.upper(),self.tckr.upper()\
+					,self.qty,np.nan,self.op,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
 			temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Stocks==self.tckr.upper())]
 			df_hl["Qty"].iloc[(df_hl.Bank==self.bnm) & (df_hl.Stocks==self.tckr.upper())]=temp_val-self.cqty
 		except:
