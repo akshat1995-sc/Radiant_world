@@ -5,6 +5,7 @@ import numpy as np
 import yfinance as yf
 from datetime import date
 from yahoo_fin import stock_info as si
+import sys, os
 
 
 class SampleApp(tk.Tk):
@@ -104,11 +105,10 @@ class Open(tk.Frame):
 			df_hl=pd.read_csv(file_hl)
 			col_hl=df_hl.columns
 			col_tl=df_tl.columns
-			templs_hl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+			serial=df_hl.Serial.iloc[-1]+1
+			templs_hl=pd.DataFrame(np.array([serial,self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_hl)
-			# temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())].sum()
-			# df_hl["Qty"].loc[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())]=float(temp_val)+float(self.qty)
-			templs_tl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+			templs_tl=pd.DataFrame(np.array([serial,self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
 			df_tl=df_tl.append(templs_tl)
 			df_hl=df_hl.append(templs_hl)
@@ -120,15 +120,16 @@ class Open(tk.Frame):
 				box.showinfo('Info','Please Close All Files')
 
 		except:
+			serial=0
 			box.showinfo('Info','New Client Entry!')
-			col_hl=["Entry Date","Bank","Client ID","Type","Ticker","Qty",\
+			col_hl=["Serial","Entry Date","Bank","Client ID","Type","Ticker","Qty",\
 			"Open Price","P&L","AB%","Gross Amount","Brokerage"]
-			col_tl=["Entry Date","Bank","Client ID",\
+			col_tl=["Serial","Entry Date","Bank","Client ID",\
 			"Type","Ticker","Open Qty","Open Price"\
 			,"Gross Amount","Brokerage"]
-			templs_tl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+			templs_tl=pd.DataFrame(np.array([serial,self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
-			templs_hl=pd.DataFrame(np.array([self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
+			templs_hl=pd.DataFrame(np.array([serial,self.date,self.bnm.upper(),self.clid.upper(),self.typ.upper()\
 				,self.tckr.upper(),self.qty,self.op,np.nan,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_hl)
 			templs_tl.to_csv(file_tl,index=False)
 			templs_hl.to_csv(file_hl,index=False)
@@ -175,72 +176,86 @@ class Close(tk.Frame):
 
 		#Read the file if available otherwise head on to create new file
 		try:
-			df_tl=pd.read_csv(file_tl)
 			df_hl=pd.read_csv(file_hl)
 			col_hl=df_hl.columns
-			col_tl=df_tl.columns
-		except:
-			box.showinfo('Info','No such client exist')
-			return()
-		else:
 			file_tlc="HTL/TLC_"+self.clid+".csv"
+			total_cur=df_hl[(df_hl.Ticker==self.tckr)&(df_hl.Bank==self.bnm)]
+			if float(self.cqty)>total_cur["Qty"].sum():
+				box.showinfo('Info','Closing Quantity is larger than units in holding!')
+				return()
 			try:
 				df_tlc=pd.read_csv(file_tlc)
 				col_tlc=df_tlc.columns
-				nf=True
 			except:
 				box.showinfo('Info','New Closing Position')
 				col_tlc=["Entry Date","Closing Date","Bank","Client ID",\
 				"Stocks","Close Qty","Open Price","Close Price"\
-				,"Gross Amount","Brokerage"]
-				nf=False
+				,"Gross Amount","Brokerage","Realized P&L"]
 				df_tlc = pd.DataFrame(columns=col_tlc)
-			else:
-				total_cur=df_hl[(df_hl.Stocks==self.tckr)&(df_hl.Bank==self.bnm)]
-				if self.cqty>total_cur["Qty"].sum():
-					box.showinfo('Info','Closing Quantity is larger than units in holding!')
-					return()
+			finally:
 				#Arrange all stock corresponding to the ticker date-wise
-				total_cur=total_cur.sort_values(by=['Entry Date'])
+				total_cur=total_cur.sort_values(by=['Serial'])
 				#Evaluate the cumulative sum vector
 				temp_cum=total_cur["Qty"].cumsum()
 				#Compare and evaluate the vector with boolean entries
-				temp_bool=temp_cum<self.cqty
+				temp_bool=temp_cum<float(self.cqty)
 				#Append additonal boolean entry to create the proper vector
 				temp_bool=np.r_[True,temp_bool[:-1]]
 				#Remove all the entries till the last boolean from the holdings file 
 				#and update them in TLC
 				temp_sum=0
-				for itera in range(len(temp_bool[temp_bool==True])-1):
-					df_hl.drop([(df_hl["Entry Date"]==total_cur["Entry Date"][itera])&\
-						(df_hl.Stocks==self.tckr)&(df_hl.Bank==self.bnm)])
-					templs_tlc=pd.DataFrame(np.array([self.date,np.nan,self.bnm.upper(),self.clid.upper(),self.tckr.upper()\
-						,total_cur.Qty[itera],np.nan,self.cp,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_tlc)
-					temp_sum+=total_cur.Qty[itera]
+				check_val=len(temp_bool[temp_bool])-1
+				if check_val==0:
+					temp_left=float(self.cqty)
+
+					#Removing the last entry from the holding files
+					temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
+						&(df_hl["Serial"]==total_cur["Serial"][check_val])]
+					df_hl["Qty"][(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
+						&(df_hl["Serial"]==total_cur["Serial"][check_val])]=temp_val-temp_left
+					real_pl=(float(self.cp)-total_cur["Open Price"][check_val])/total_cur["Open Price"][check_val]
+					templs_tlc=pd.DataFrame(np.array([total_cur["Entry Date"][check_val],self.cdate,self.bnm.upper(),\
+							self.clid.upper(),self.tckr.upper(),temp_left,\
+							total_cur["Open Price"][check_val],self.cp,np.nan,np.nan,real_pl]).reshape(1,-1),columns=col_tlc)
 					df_tlc=df_tlc.append(templs_tlc)
-				temp_left=self.cqty-temp_sum
-				#Removing the last entry from the holding files
-				temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Stocks==self.tckr.upper())\
-					&(df_hl["Entry Date"]==total_cur["Entry Date"][itera+1])]
-				df_hl["Qty"].iloc[(df_hl.Bank==self.bnm) & (df_hl.Stocks==self.tckr.upper())\
-					&(df_hl["Entry Date"]==total_cur["Entry Date"][itera+1])]=temp_val-temp_left
 
-
-
-				templs_tlc=pd.DataFrame(np.array([self.date,np.nan,self.bnm.upper(),self.clid.upper(),self.tckr.upper()\
-					,self.qty,np.nan,self.op,np.nan,np.nan,np.nan]).reshape(1,-1),columns=col_tl)
-			if not nf:
-				df_tlc=df_tl.append(templs_tlc)
+				else:
+					for itera in range(len(temp_bool[temp_bool])-1):
+						df_hl=df_hl.drop(df_hl[df_hl.Serial==total_cur.Serial[itera]].index)
+						real_pl=(float(self.cp)-total_cur["Open Price"][itera])/total_cur["Open Price"][itera]
+						templs_tlc=pd.DataFrame(np.array([total_cur["Entry Date"][itera],self.cdate,self.bnm.upper(),\
+							self.clid.upper(),self.tckr.upper(),total_cur.Qty[itera],\
+							total_cur["Open Price"][itera],self.cp,np.nan,np.nan,real_pl]).reshape(1,-1),columns=col_tlc)
+						temp_sum+=total_cur.Qty[itera]
+						df_tlc=df_tlc.append(templs_tlc)
+					temp_left=float(self.cqty)-temp_sum
+					#Removing the last entry from the holding files
+					temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
+						&(df_hl["Serial"]==total_cur["Serial"][itera+1])]
+					df_hl["Qty"][(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
+						&(df_hl["Serial"]==total_cur["Serial"][itera+1])]=temp_val-temp_left
+					real_pl=(float(self.cp)-total_cur["Open Price"][itera+1])/total_cur["Open Price"][itera+1]
+					templs_tlc=pd.DataFrame(np.array([total_cur["Entry Date"][itera+1],self.cdate,self.bnm.upper(),\
+							self.clid.upper(),self.tckr.upper(),temp_left,\
+							total_cur["Open Price"][itera+1],self.cp,np.nan,np.nan,real_pl]).reshape(1,-1),columns=col_tlc)
+					df_tlc=df_tlc.append(templs_tlc)
 
 
 		#In case the file is already open, request to close
-			try:
-				df_tlc.to_csv(file_tl,index=False)
-				df_hl.to_csv(file_hl,index=False)
-			except:
-				box.showinfo('Info','Please Close All Files')
+				try:
+					df_tlc.to_csv(file_tlc,index=False)
+					df_hl.to_csv(file_hl,index=False)
+					box.showinfo('Info','Close Position Registered')
+				except:
+					box.showinfo('Info','Please Close All Files')
+		except Exception as e:
+			exc_type, exc_obj, exc_tb = sys.exc_info()
+			fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+			print(e,exc_type, fname, exc_tb.tb_lineno)
+			box.showinfo('Info','No such client exist')
+			return()
+			
 
-			box.showinfo('Info','Close Position Registered')
 
 class Summary(tk.Frame):
 	def __init__(self, master):
