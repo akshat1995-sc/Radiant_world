@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np 
 import yfinance as yf
 from datetime import date
+import time
 from yahoo_fin import stock_info as si
 import sys, os
 
@@ -249,9 +250,9 @@ class Close(tk.Frame):
 				except:
 					box.showinfo('Info','Please Close All Files')
 		except Exception as e:
-			exc_type, exc_obj, exc_tb = sys.exc_info()
-			fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-			print(e,exc_type, fname, exc_tb.tb_lineno)
+			# exc_type, exc_obj, exc_tb = sys.exc_info()
+			# fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+			# print(e,exc_type, fname, exc_tb.tb_lineno)
 			box.showinfo('Info','No such client exist')
 			return()
 			
@@ -264,10 +265,61 @@ class Summary(tk.Frame):
 		self.e_tckr_sum=tk.Entry(self,bd =5)
 		self.e_tckr_sum.grid(row=0, column=1)
 		tk.Button(self, text="View",
-		  command=lambda: master.switch_frame(Login)).grid(row=1,column=0)
+		  command=self.prep_sum).grid(row=1,column=0)
 		tk.Button(self, text="Go Back",
 		  command=lambda: master.switch_frame(Entr_summ)).grid(row=1,column=1)
+	def prep_sum(self):
+		global sum_tckr
+		sum_tckr=self.e_tckr_sum.get().upper()
+		self.master.switch_frame(Summ_win)
 
+
+class Summ_win(tk.Frame):
+	"""Make a New open entry Window"""
+	def __init__(self, master):
+		tk.Frame.__init__(self, master)
+		self.sum_tckr=sum_tckr
+		temp_sum=0
+		col_nm=["Serial","Entry Date","Bank","Client ID","Type","Qty","Open Price",\
+		"Current Price","Notional P&L"]
+		df_hl_temp=pd.DataFrame(columns=col_nm)
+		#Find all the holding files
+		for file in os.listdir("C:/Users/Axis/pyfile/Radiant_world/HTL"):
+			if file.startswith("HL_"):
+				df_temp=pd.read_csv("HTL/"+file)
+				#Check if the holding is non empty
+				temp_qty=df_temp.Qty[df_temp.Ticker==self.sum_tckr]
+				if (temp_qty.sum()>0):
+					#Record the number of non zero holdings
+					temp_sum+=temp_qty.sum()
+					temp_df=df_temp[df_temp.Ticker==self.sum_tckr]
+					df_hl_temp=df_hl_temp.append(temp_df.drop(columns="Ticker"))
+		if temp_sum==0:
+			box.showinfo("Info",'No Entry Exist')
+			self.master.switch_frame(Summary)
+		for k in range(len(col_nm)-2):
+			for j in range(df_hl_temp.shape[0]):
+				tk.Label(self, text=col_nm[k]).grid(row=0, column=k)
+				tk.Label(self, text=df_hl_temp[col_nm[k]][j]).grid(row=j+1, column=k)
+		tk.Label(self, text=col_nm[-1]).grid(row=0, column=len(col_nm)-1)
+		tk.Label(self, text=col_nm[-2]).grid(row=0, column=len(col_nm))
+		# while(True):
+		cur_val=si.get_live_price(self.sum_tckr)
+		for i in range(df_hl_temp.shape[0]):
+			df_hl_temp["Current Price"][i]=cur_val
+			df_hl_temp["Notional P&L"][i]=(float(df_hl_temp["Open Price"][i])\
+				-cur_val)/float(df_hl_temp["Open Price"][i])
+		temp_sign=np.sign(df_hl_temp["Notional P&L"])
+		temp_sign[temp_sign==-1]="red"
+		temp_sign[temp_sign==1]="green"
+		temp_sign[temp_sign==0]="grey"
+
+		for j in range(df_hl_temp.shape[0]):
+			col=temp_sign[j]
+			tk.Label(self, text=df_hl_temp[col_nm[-2]][j]).grid(row=j+1, column=len(col_nm))
+			tk.Label(self, text=df_hl_temp[col_nm[-1]][j],bg=col).grid(row=j+1, column=len(col_nm)-1)
+		tk.Button(self, text="Go Back",
+		  command=lambda: master.switch_frame(Summary)).grid(row=10,column=1)
 
 # window = Tk()
 # window.title('Radiant World')
