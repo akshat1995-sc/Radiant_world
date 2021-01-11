@@ -8,12 +8,16 @@ import time
 from yahoo_fin import stock_info as si
 import sys, os
 
+base_pth=os.path.dirname(__file__)
+if ((os.path.exists(base_pth+"/HTL"))==False):
+	os.mkdir(base_pth+"/HTL")
 
 class SampleApp(tk.Tk):
 	def __init__(self):
 		tk.Tk.__init__(self)
 		self.title("Radiant World")
-		self.iconbitmap("rw.ico")
+		self.resizable(width=False, height=False)
+		self.iconbitmap(base_pth+"/rw.ico")
 		self._frame = None
 		self.switch_frame(Login)
 
@@ -88,6 +92,11 @@ class Open(tk.Frame):
 	def update(self):
 		"""Updating button's operation"""
 		self.tckr=self.e_tckr.get().lower()
+		try:
+			si.get_live_price(self.tckr)
+		except:
+			box.showinfo('Info','The Ticker is invalid, Please check yahoo finance!')
+			return()
 		self.qty=self.e_qty.get()
 		self.op=float(self.e_bpr.get())
 		self.bnm=self.e_bnm.get().upper()
@@ -97,8 +106,8 @@ class Open(tk.Frame):
 
 		#The names of each column are known beforehand
 		#File name declration follows below
-		file_tl="HTL/TL_"+self.clid+".csv"
-		file_hl="HTL/HL_"+self.clid+".csv"
+		file_tl=base_pth+"/HTL/TL_"+self.clid+".csv"
+		file_hl=base_pth+"/HTL/HL_"+self.clid+".csv"
 
 		#Read the file if available otherwise head on to create new file
 		try:
@@ -167,12 +176,11 @@ class Close(tk.Frame):
 		self.cqty=self.e_qtyc.get()
 		self.cp=float(self.e_cpr.get())
 		self.bnm=self.e_bnm.get().upper()
-		self.clid=self.e_cid.get()
+		self.clid=self.e_cid.get().upper()
 		self.cdate=date.today()
 
 		#The names of each column are known beforehand
 		#File name declration follows below
-		file_tl="HTL/TL_"+self.clid+".csv"
 		file_hl="HTL/HL_"+self.clid+".csv"
 
 		#Read the file if available otherwise head on to create new file
@@ -181,6 +189,9 @@ class Close(tk.Frame):
 			col_hl=df_hl.columns
 			file_tlc="HTL/TLC_"+self.clid+".csv"
 			total_cur=df_hl[(df_hl.Ticker==self.tckr)&(df_hl.Bank==self.bnm)]
+			if total_cur.Qty.sum()==0:
+				box.showinfo('Info','No Such Entry in the Holdings left!')
+				return()
 			if float(self.cqty)>total_cur["Qty"].sum():
 				box.showinfo('Info','Closing Quantity is larger than units in holding!')
 				return()
@@ -205,19 +216,21 @@ class Close(tk.Frame):
 				#Remove all the entries till the last boolean from the holdings file 
 				#and update them in TLC
 				temp_sum=0
+				#check_val checks the number of boolean 1's. In case only single True values is
+				#present, proceed to run a single time procedure
 				check_val=len(temp_bool[temp_bool])-1
 				if check_val==0:
 					temp_left=float(self.cqty)
 
 					#Removing the last entry from the holding files
 					temp_val=df_hl.Qty[(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
-						&(df_hl["Serial"]==total_cur["Serial"][check_val])]
+						&(df_hl["Serial"]==float(total_cur["Serial"]))]
 					df_hl["Qty"][(df_hl.Bank==self.bnm) & (df_hl.Ticker==self.tckr.upper())\
-						&(df_hl["Serial"]==total_cur["Serial"][check_val])]=temp_val-temp_left
-					real_pl=(float(self.cp)-total_cur["Open Price"][check_val])/total_cur["Open Price"][check_val]
-					templs_tlc=pd.DataFrame(np.array([total_cur["Entry Date"][check_val],self.cdate,self.bnm.upper(),\
+						&(df_hl["Serial"]==float(total_cur["Serial"]))]=temp_val-temp_left
+					real_pl=(float(self.cp)-total_cur["Open Price"])/total_cur["Open Price"]
+					templs_tlc=pd.DataFrame(np.array([total_cur["Entry Date"],self.cdate,self.bnm.upper(),\
 							self.clid.upper(),self.tckr.upper(),temp_left,\
-							total_cur["Open Price"][check_val],self.cp,np.nan,np.nan,real_pl]).reshape(1,-1),columns=col_tlc)
+							total_cur["Open Price"],self.cp,np.nan,np.nan,real_pl]).reshape(1,-1),columns=col_tlc)
 					df_tlc=df_tlc.append(templs_tlc)
 
 				else:
@@ -250,9 +263,9 @@ class Close(tk.Frame):
 				except:
 					box.showinfo('Info','Please Close All Files')
 		except Exception as e:
-			# exc_type, exc_obj, exc_tb = sys.exc_info()
-			# fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-			# print(e,exc_type, fname, exc_tb.tb_lineno)
+			exc_type, exc_obj, exc_tb = sys.exc_info()
+			fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+			print(e,exc_type, fname, exc_tb.tb_lineno)
 			box.showinfo('Info','No such client exist')
 			return()
 			
@@ -261,6 +274,7 @@ class Close(tk.Frame):
 class Summary(tk.Frame):
 	def __init__(self, master):
 		tk.Frame.__init__(self, master)
+		master.title("Radiant World")
 		tk.Label(self, text='Ticker:').grid(row=0, column=0)
 		self.e_tckr_sum=tk.Entry(self,bd =5)
 		self.e_tckr_sum.grid(row=0, column=1)
@@ -278,13 +292,14 @@ class Summ_win(tk.Frame):
 	"""Make a New open entry Window"""
 	def __init__(self, master):
 		tk.Frame.__init__(self, master)
+		master.title(sum_tckr)
 		self.sum_tckr=sum_tckr
 		temp_sum=0
 		col_nm=["Serial","Entry Date","Bank","Client ID","Type","Qty","Open Price",\
-		"Current Price","Notional P&L"]
+		"Current Price","% Price","Notional P/L","Average Price","Exposure","% Exposure","Total Qty"]
 		df_hl_temp=pd.DataFrame(columns=col_nm)
 		#Find all the holding files
-		for file in os.listdir("C:/Users/Axis/pyfile/Radiant_world/HTL"):
+		for file in os.listdir(base_pth+"/HTL"):
 			if file.startswith("HL_"):
 				df_temp=pd.read_csv("HTL/"+file)
 				#Check if the holding is non empty
@@ -296,55 +311,49 @@ class Summ_win(tk.Frame):
 					df_hl_temp=df_hl_temp.append(temp_df.drop(columns="Ticker"))
 		if temp_sum==0:
 			box.showinfo("Info",'No Entry Exist')
-			self.master.switch_frame(Summary)
-		for k in range(len(col_nm)-2):
+			tk.Button(self, text="Go Back",
+			  command=lambda: master.switch_frame(Summary)).grid(row=1,column=1)
+		else:
+			for k in range(7):
+				for j in range(df_hl_temp.shape[0]):
+					tk.Label(self, text=col_nm[k],bg="yellow",font="bold",relief="solid").grid(row=0, column=k)
+					tk.Label(self, text=df_hl_temp[col_nm[k]][j]).grid(row=j+1, column=k)
+			tk.Label(self, text=col_nm[-7],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-6)
+			tk.Label(self, text=col_nm[-6],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-5)
+			tk.Label(self, text=col_nm[-5],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-4)
+			tk.Label(self, text=col_nm[-4],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-3)
+			tk.Label(self, text=col_nm[-3],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-2)
+			tk.Label(self, text=col_nm[-2],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-1)
+			tk.Label(self, text=col_nm[-1],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm))
+			# while(True):
+			cur_val=si.get_live_price(self.sum_tckr)
+			for i in range(df_hl_temp.shape[0]):
+				df_hl_temp["Current Price"][i]=cur_val
+				df_hl_temp["% Price"][i]=100*((-1*float(df_hl_temp["Open Price"][i])\
+					+cur_val)/float(df_hl_temp["Open Price"][i]))
+				df_hl_temp["Notional P/L"][i]=(-1*float(df_hl_temp["Open Price"][i])\
+					+cur_val)*df_hl_temp.Qty[i]
+			temp_sign=np.sign(df_hl_temp["Notional P/L"])
+			temp_sign[temp_sign==-1]="red"
+			temp_sign[temp_sign==1]="green"
+			temp_sign[temp_sign==0]="grey"
+
+			avg_price=df_hl_temp["Open Price"].mean()
+			expo=np.dot(df_hl_temp["Current Price"],df_hl_temp["Qty"])
+			per_exp=(100*((df_hl_temp["Current Price"]*df_hl_temp["Qty"])/expo)).sum()
+			qty_total=df_hl_temp["Qty"].sum()
+
 			for j in range(df_hl_temp.shape[0]):
-				tk.Label(self, text=col_nm[k]).grid(row=0, column=k)
-				tk.Label(self, text=df_hl_temp[col_nm[k]][j]).grid(row=j+1, column=k)
-		tk.Label(self, text=col_nm[-1]).grid(row=0, column=len(col_nm)-1)
-		tk.Label(self, text=col_nm[-2]).grid(row=0, column=len(col_nm))
-		# while(True):
-		cur_val=si.get_live_price(self.sum_tckr)
-		for i in range(df_hl_temp.shape[0]):
-			df_hl_temp["Current Price"][i]=cur_val
-			df_hl_temp["Notional P&L"][i]=(float(df_hl_temp["Open Price"][i])\
-				-cur_val)/float(df_hl_temp["Open Price"][i])
-		temp_sign=np.sign(df_hl_temp["Notional P&L"])
-		temp_sign[temp_sign==-1]="red"
-		temp_sign[temp_sign==1]="green"
-		temp_sign[temp_sign==0]="grey"
+				col=temp_sign[j]
+				tk.Label(self, text=round(df_hl_temp["Notional P/L"][j],3),bg=col).grid(row=j+1, column=len(col_nm)-4)
+				tk.Label(self, text=df_hl_temp["% Price"][j]).grid(row=j+1, column=len(col_nm)-5)
+				tk.Label(self, text=df_hl_temp["Current Price"][j]).grid(row=j+1, column=len(col_nm)-6)
+			tk.Label(self, text=avg_price).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-3)
+			tk.Label(self, text=expo).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-2)
+			tk.Label(self, text=per_exp).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-1)
+			tk.Label(self, text=qty_total).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm))
+			tk.Button(self, text="Go Back",
+			  command=lambda: master.switch_frame(Summary)).grid(row=df_hl_temp.shape[0]+1,column=1)
 
-		for j in range(df_hl_temp.shape[0]):
-			col=temp_sign[j]
-			tk.Label(self, text=df_hl_temp[col_nm[-2]][j]).grid(row=j+1, column=len(col_nm))
-			tk.Label(self, text=df_hl_temp[col_nm[-1]][j],bg=col).grid(row=j+1, column=len(col_nm)-1)
-		tk.Button(self, text="Go Back",
-		  command=lambda: master.switch_frame(Summary)).grid(row=10,column=1)
-
-# window = Tk()
-# window.title('Radiant World')
-
-# frame = Frame(window)
-
-# Label1 = Label(window,text = 'Username:')
-# Label1.pack(padx=15,pady= 5)
-
-# entry1 = Entry(window,bd =5)
-# entry1.pack(padx=15, pady=5)
-
-
-# Label2 = Label(window,text = 'Password: ')
-# Label2.pack(padx = 15,pady=6)
-
-# entry2 = Entry(window, bd=5)
-# entry2.pack(padx = 15,pady=7)
-
-
-# btn = Button(frame, text = 'Check Login',command = dialog1)
-
-
-# btn.pack(side = RIGHT , padx =5)
-# frame.pack(padx=100,pady = 19)
-# window.mainloop()
 app = SampleApp()
 app.mainloop()
