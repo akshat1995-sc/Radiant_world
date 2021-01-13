@@ -89,6 +89,7 @@ class Open(tk.Frame):
 		tk.Button(self, text="Go Back",
 		  command=lambda: master.switch_frame(Entr_summ)).grid(row=6,column=1)
 
+
 	def update(self):
 		"""Updating button's operation"""
 		self.tckr=self.e_tckr.get().lower()
@@ -174,7 +175,7 @@ class Close(tk.Frame):
 		"""Close position button's operation. Entry should be there in both TL and HL"""
 		self.tckr=self.e_tckr.get().upper()
 		self.cqty=self.e_qtyc.get()
-		self.cp=float(self.e_cpr.get())
+		self.cp=self.e_cpr.get()
 		self.bnm=self.e_bnm.get().upper()
 		self.clid=self.e_cid.get().upper()
 		self.cdate=date.today()
@@ -205,6 +206,7 @@ class Close(tk.Frame):
 				,"Gross Amount","Brokerage","Realized P&L"]
 				df_tlc = pd.DataFrame(columns=col_tlc)
 			finally:
+				self.cp=float(self.cp)
 				#Arrange all stock corresponding to the ticker date-wise
 				total_cur=total_cur.sort_values(by=['Serial'])
 				#Evaluate the cumulative sum vector
@@ -297,7 +299,7 @@ class Summ_win(tk.Frame):
 		temp_sum=0
 		col_nm=["Serial","Entry Date","Bank","Client ID","Type","Qty","Open Price",\
 		"Current Price","% Price","Notional P/L","Average Price","Exposure","% Exposure","Total Qty"]
-		df_hl_temp=pd.DataFrame(columns=col_nm)
+		self.df_hl_temp=pd.DataFrame(columns=col_nm)
 		#Find all the holding files
 		for file in os.listdir(base_pth+"/HTL"):
 			if file.startswith("HL_"):
@@ -308,52 +310,79 @@ class Summ_win(tk.Frame):
 					#Record the number of non zero holdings
 					temp_sum+=temp_qty.sum()
 					temp_df=df_temp[df_temp.Ticker==self.sum_tckr]
-					df_hl_temp=df_hl_temp.append(temp_df.drop(columns="Ticker"))
+					self.df_hl_temp=self.df_hl_temp.append(temp_df.drop(columns="Ticker"))
+
+		if self.df_hl_temp.shape[0]==0:
+			self.inter_shape=1
+		else:
+			self.inter_shape=self.df_hl_temp.shape[0]
+
+
 		if temp_sum==0:
 			box.showinfo("Info",'No Entry Exist')
 			tk.Button(self, text="Go Back",
 			  command=lambda: master.switch_frame(Summary)).grid(row=1,column=1)
 		else:
+
 			for k in range(7):
-				for j in range(df_hl_temp.shape[0]):
-					tk.Label(self, text=col_nm[k],bg="yellow",font="bold",relief="solid").grid(row=0, column=k)
-					tk.Label(self, text=df_hl_temp[col_nm[k]][j]).grid(row=j+1, column=k)
-			tk.Label(self, text=col_nm[-7],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-6)
-			tk.Label(self, text=col_nm[-6],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-5)
-			tk.Label(self, text=col_nm[-5],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-4)
-			tk.Label(self, text=col_nm[-4],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-3)
-			tk.Label(self, text=col_nm[-3],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-2)
-			tk.Label(self, text=col_nm[-2],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm)-1)
-			tk.Label(self, text=col_nm[-1],bg="yellow",font="bold",relief="solid").grid(row=0, column=len(col_nm))
+				for j in range(self.inter_shape):
+					tk.Label(self, text=col_nm[k],bg="yellow",font="10bold",relief="solid").grid(row=0, column=k)
+					tk.Label(self, text=self.df_hl_temp[col_nm[k]].iloc[j]).grid(row=j+1, column=k)
+			tk.Label(self, text=col_nm[-7],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-6)
+			tk.Label(self, text=col_nm[-6],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-5)
+			tk.Label(self, text=col_nm[-5],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-4)
+			tk.Label(self, text=col_nm[-4],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-3)
+			tk.Label(self, text=col_nm[-3],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-2)
+			tk.Label(self, text=col_nm[-2],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm)-1)
+			tk.Label(self, text=col_nm[-1],bg="yellow",font="10bold",relief="solid").grid(row=0, column=len(col_nm))
 			# while(True):
 			cur_val=si.get_live_price(self.sum_tckr)
-			for i in range(df_hl_temp.shape[0]):
-				df_hl_temp["Current Price"][i]=cur_val
-				df_hl_temp["% Price"][i]=100*((-1*float(df_hl_temp["Open Price"][i])\
-					+cur_val)/float(df_hl_temp["Open Price"][i]))
-				df_hl_temp["Notional P/L"][i]=(-1*float(df_hl_temp["Open Price"][i])\
-					+cur_val)*df_hl_temp.Qty[i]
-			temp_sign=np.sign(df_hl_temp["Notional P/L"])
-			temp_sign[temp_sign==-1]="red"
-			temp_sign[temp_sign==1]="green"
-			temp_sign[temp_sign==0]="grey"
-
-			avg_price=df_hl_temp["Open Price"].mean()
-			expo=np.dot(df_hl_temp["Current Price"],df_hl_temp["Qty"])
-			per_exp=(100*((df_hl_temp["Current Price"]*df_hl_temp["Qty"])/expo)).sum()
-			qty_total=df_hl_temp["Qty"].sum()
-
-			for j in range(df_hl_temp.shape[0]):
-				col=temp_sign[j]
-				tk.Label(self, text=round(df_hl_temp["Notional P/L"][j],3),bg=col).grid(row=j+1, column=len(col_nm)-4)
-				tk.Label(self, text=df_hl_temp["% Price"][j]).grid(row=j+1, column=len(col_nm)-5)
-				tk.Label(self, text=df_hl_temp["Current Price"][j]).grid(row=j+1, column=len(col_nm)-6)
-			tk.Label(self, text=avg_price).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-3)
-			tk.Label(self, text=expo).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-2)
-			tk.Label(self, text=per_exp).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm)-1)
-			tk.Label(self, text=qty_total).grid(row=np.int(df_hl_temp.shape[0]/2)+1, column=len(col_nm))
+			for i in range(self.inter_shape):
+				self.df_hl_temp["Current Price"].iloc[i]=cur_val
+				self.df_hl_temp["% Price"].iloc[i]=100*((-1*float(self.df_hl_temp["Open Price"].iloc[i])\
+					+cur_val)/float(self.df_hl_temp["Open Price"].iloc[i]))
+				self.df_hl_temp["Notional P/L"].iloc[i]=(-1*float(self.df_hl_temp["Open Price"].iloc[i])\
+					+cur_val)*self.df_hl_temp.Qty.iloc[i]
+			self.temp_sign=np.sign(self.df_hl_temp["Notional P/L"])
+			self.temp_sign[self.temp_sign==-1]="red"
+			self.temp_sign[self.temp_sign==1]="green"
+			self.temp_sign[self.temp_sign==0]="grey"
+			self.avg_price=self.df_hl_temp["Open Price"].mean()
+			self.expo=np.dot(self.df_hl_temp["Current Price"],self.df_hl_temp["Qty"])
+			self.per_exp=(100*((self.df_hl_temp["Current Price"]*self.df_hl_temp["Qty"])/self.expo)).sum()
+			self.qty_total=self.df_hl_temp["Qty"].sum()
+			for j in range(self.inter_shape):
+				col=self.temp_sign.iloc[j]
+				tk.Label(self, text=round(self.df_hl_temp["Notional P/L"].iloc[j],3),bg=col).grid(row=j+1, column=len(col_nm)-4)
+				tk.Label(self, text=self.df_hl_temp["% Price"].iloc[j]).grid(row=j+1, column=len(col_nm)-5)
+				tk.Label(self, text=self.df_hl_temp["Current Price"].iloc[j]).grid(row=j+1, column=len(col_nm)-6)
+			tk.Label(self, text=self.avg_price).grid(row=np.int(self.df_hl_temp.shape[0]/2)+1, column=len(col_nm)-3)
+			tk.Label(self, text=self.expo).grid(row=np.int(self.df_hl_temp.shape[0]/2)+1, column=len(col_nm)-2)
+			tk.Label(self, text=self.per_exp).grid(row=np.int(self.df_hl_temp.shape[0]/2)+1, column=len(col_nm)-1)
+			tk.Label(self, text=self.qty_total).grid(row=np.int(self.df_hl_temp.shape[0]/2)+1, column=len(col_nm))
 			tk.Button(self, text="Go Back",
-			  command=lambda: master.switch_frame(Summary)).grid(row=df_hl_temp.shape[0]+1,column=1)
+			  command=lambda: master.switch_frame(Summary)).grid(row=self.df_hl_temp.shape[0]+1,column=1)
+			tk.Button(self, text="Update",
+			  command=self.update_hold).grid(row=self.df_hl_temp.shape[0]+1,column=3)
 
+
+
+	def update_hold(self):
+		cur_val=si.get_live_price(self.sum_tckr)
+		for i in range(self.inter_shape):
+			self.df_hl_temp["Current Price"].iloc[i]=cur_val
+			self.df_hl_temp["% Price"].iloc[i]=100*((-1*float(self.df_hl_temp["Open Price"].iloc[i])\
+				+cur_val)/float(self.df_hl_temp["Open Price"].iloc[i]))
+			self.df_hl_temp["Notional P/L"].iloc[i]=(-1*float(self.df_hl_temp["Open Price"].iloc[i])\
+				+cur_val)*self.df_hl_temp.Qty.iloc[i]
+		self.temp_sign=np.sign(self.df_hl_temp["Notional P/L"])
+		self.temp_sign[self.temp_sign==-1]="red"
+		self.temp_sign[self.temp_sign==1]="green"
+		self.temp_sign[self.temp_sign==0]="grey"
+		self.avg_price=self.df_hl_temp["Open Price"].mean()
+		self.expo=np.dot(self.df_hl_temp["Current Price"],self.df_hl_temp["Qty"])
+		self.per_exp=(100*((self.df_hl_temp["Current Price"]*self.df_hl_temp["Qty"])/self.expo)).sum()
+		self.qty_total=self.df_hl_temp["Qty"].sum()
+		self.update()
 app = SampleApp()
 app.mainloop()
